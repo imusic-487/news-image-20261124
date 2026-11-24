@@ -35,6 +35,7 @@ def main() -> None:
         raise RuntimeError("entry.png was not written whole")
     if hashlib.sha256(written).hexdigest() != hashlib.sha256(blob).hexdigest():
         raise RuntimeError("entry.png hash mismatch after write")
+    print("entry.png: %d bytes, sha256 %s" % (len(written), hashlib.sha256(written).hexdigest()))
 
 
 if __name__ == "__main__":
