@@ -1,42 +1,67 @@
-# The World in One Page — news-image-20261124 entry (Python 3.13, stdlib only).
-#
-# The image is entry.png, stored beside this file. This program writes it to
-# /output/entry.png exactly as stored, so the judge sees the image this repo
-# holds and nothing else. It uses no network, no randomness and no clock:
-# running it twice produces the same bytes twice.
-#
-# Local run (MAKEFUN_OUTPUT_DIR stands in for /output outside the grader):
-#   mkdir -p out && MAKEFUN_OUTPUT_DIR=out python3 main.py
+"""Copy the bundled entry image into the output directory, verified."""
 
 import hashlib
 import os
+import sys
 from pathlib import Path
 
-HERE = Path(__file__).resolve().parent
-IMAGE = HERE / "entry.png"
+PNG_HEADER = b"\x89PNG\r\n\x1a\n"
+JPEG_HEADER = b"\xff\xd8\xff"
 
 
-def read_image() -> bytes:
-    blob = IMAGE.read_bytes()
-    if blob[:8] == b"\x89PNG\r\n\x1a\n" or blob[:3] == b"\xff\xd8\xff":
-        return blob
-    raise ValueError("entry.png is not a PNG or JPEG image")
+def _is_image(data: bytes) -> bool:
+    return data.startswith(PNG_HEADER) or data.startswith(JPEG_HEADER)
 
 
-def main() -> None:
-    blob = read_image()
-    out_dir = Path(os.environ.get("MAKEFUN_OUTPUT_DIR", "/output"))
-    out_dir.mkdir(parents=True, exist_ok=True)
+def main() -> int:
+    here = Path(__file__).resolve().parent
+    source = here / "entry.png"
+
+    try:
+        payload = source.read_bytes()
+    except OSError as exc:
+        print(f"error: cannot read {source}: {exc}", file=sys.stderr)
+        return 1
+
+    if not payload:
+        print("error: entry.png is empty", file=sys.stderr)
+        return 1
+
+    if not _is_image(payload):
+        print(
+            "error: entry.png does not start with a PNG or JPEG signature",
+            file=sys.stderr,
+        )
+        return 1
+
+    out_dir = Path(os.environ.get("MAKEFUN_OUTPUT_DIR") or "/output")
     target = out_dir / "entry.png"
-    target.write_bytes(blob)
-    # Confirm the write landed whole before returning: same bytes, same hash.
-    written = target.read_bytes()
-    if written != blob:
-        raise RuntimeError("entry.png was not written whole")
-    if hashlib.sha256(written).hexdigest() != hashlib.sha256(blob).hexdigest():
-        raise RuntimeError("entry.png hash mismatch after write")
-    print("entry.png: %d bytes, sha256 %s" % (len(written), hashlib.sha256(written).hexdigest()))
+
+    try:
+        out_dir.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(payload)
+    except OSError as exc:
+        print(f"error: cannot write {target}: {exc}", file=sys.stderr)
+        return 1
+
+    try:
+        written = target.read_bytes()
+    except OSError as exc:
+        print(f"error: cannot read back {target}: {exc}", file=sys.stderr)
+        return 1
+
+    if written != payload:
+        print("error: written entry.png differs from the source bytes", file=sys.stderr)
+        return 1
+
+    digest = hashlib.sha256(written).hexdigest()
+    if digest != hashlib.sha256(payload).hexdigest():
+        print("error: sha256 mismatch after writing entry.png", file=sys.stderr)
+        return 1
+
+    print(f"Wrote {len(written)} bytes to {target} sha256={digest}")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
